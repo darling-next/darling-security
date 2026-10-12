@@ -1394,6 +1394,28 @@ SecPolicyRef SecPolicyCreateAppleExternalDeveloper(void)
     __OSX_AVAILABLE(10.12) __IOS_AVAILABLE(10.0) __TVOS_AVAILABLE(10.0) __WATCHOS_AVAILABLE(3.0);
 
 /*!
+ @function SecPolicyCreateAppleExternalDeveloperOptionalExpiry
+ @abstract Returns the policy object for verifying Apple-issued external developer certificates,
+ with the validity (expiry) check made optional.
+ @discussion The same policy as SecPolicyCreateAppleExternalDeveloper, and the same function Apple
+ ships under this name: Apple's Security exports both symbols side by side (the macOS SDK's
+ Security.tbd lists _SecPolicyCreateAppleExternalDeveloper and
+ _SecPolicyCreateAppleExternalDeveloperOptionalExpiry in one export block), and Apple's published
+ source defines SecPolicyCreateAppleExternalDeveloper as a call to this function with checkExpiry
+ true.  A client that binds this name passes the flag itself: measured on the client that stopped
+ this ladder's rung, DVTFoundation calls it with checkExpiry false (it asks whether a certificate
+ chain is WWDR-issued, and reaches the call as `xorl %edi,%edi; callq
+ _SecPolicyCreateAppleExternalDeveloperOptionalExpiry`), so the policy has NO temporal validity
+ check -- exactly what OptionalExpiry means.
+ @param checkExpiry Whether the policy requires the chain's certificates to be within their
+ validity period.  false builds the policy without the temporal-validity option.
+ @result A policy object. The caller is responsible for calling CFRelease on this when
+ it is no longer needed.
+ */
+__nullable CF_RETURNS_RETAINED
+SecPolicyRef SecPolicyCreateAppleExternalDeveloperOptionalExpiry(bool checkExpiry);
+
+/*!
  @function SecPolicyCreateAppleSoftwareSigning
  @abstract Returns a policy object for verifying the Apple Software Signing certificate.
  @discussion The resulting policy uses the Basic X.509 policy with no validity check and

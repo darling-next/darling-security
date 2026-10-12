@@ -69,6 +69,13 @@ if (BUILD_TARGET_64BIT)
 		DEPENDS
 			${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
 			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
+			# Security.exp-in #includes these, so they are part of the export list too: with
+			# only the two files above listed, a symbol added to an included list (e.g.
+			# SecExports.exp-in) left the OLD .exp in place -- the build did not notice, and
+			# the symbol was compiled in but not exported.
+			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
+			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecAccessControlExports.exp-in
+			${CMAKE_CURRENT_SOURCE_DIR}/../keychain/SecureObjectSync/SOSExports.exp-in
 		COMMAND
 			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target ${APPLE_TARGET_TRIPLET_64BIT} ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_64BIT}.exp
 	)
@@ -110,6 +117,10 @@ if (BUILD_TARGET_32BIT)
 		DEPENDS
 			${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in
 			${CMAKE_CURRENT_SOURCE_DIR}/../CSSMOID.exp-in
+			# the same included export lists as the 64-bit command above
+			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecExports.exp-in
+			${CMAKE_CURRENT_SOURCE_DIR}/sec/Security/SecAccessControlExports.exp-in
+			${CMAKE_CURRENT_SOURCE_DIR}/../keychain/SecureObjectSync/SOSExports.exp-in
 		COMMAND
 			${CMAKE_C_COMPILER} -E -Xpreprocessor -P -x objective-c -target ${APPLE_TARGET_TRIPLET_32BIT} ${EXP_IN_FLAGS} ${CMAKE_CURRENT_SOURCE_DIR}/../Security.exp-in -o ${CMAKE_CURRENT_BINARY_DIR}/Security.${APPLE_ARCH_32BIT}.exp
 	)

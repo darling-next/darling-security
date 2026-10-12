@@ -3677,23 +3677,49 @@ errOut:
     return result;
 }
 
-SecPolicyRef SecPolicyCreateAppleExternalDeveloper(void) {
+/*
+ SecPolicyCreateAppleExternalDeveloperOptionalExpiry is Apple's own function of this name: its body
+ below is Apple's published source verbatim in structure (apple-oss-distributions/Security,
+ trust/... OSX/sec/Security/SecPolicy.c), which is the reference for a policy the client binds from
+ a closed binary.  The difference from SecPolicyCreateAppleExternalDeveloper is the flag: with
+ checkExpiry false the policy is the basic CERTIFICATE policy rather than the basic X.509 one, i.e.
+ it has no temporal-validity check.  DVTFoundation (the client that stopped this ladder's rung) calls
+ it with checkExpiry false -- `xorl %edi,%edi; callq
+ _SecPolicyCreateAppleExternalDeveloperOptionalExpiry` in _DVTSecCertificateIsWWDRIssued -- and then
+ hands the result to SecTrustCreateWithCertificates and evaluates that trust, so the policy has to be
+ a real policy object: a fabricated one that always passes would silently turn a WWDR-issuer check
+ into "yes".  Apple's definition is also why SecPolicyCreateAppleExternalDeveloper below is now a
+ one-line call: Apple's own source defines it as this function with checkExpiry true, and the two
+ policies this tree would otherwise build separately are the same policy.
+*/
+SecPolicyRef SecPolicyCreateAppleExternalDeveloperOptionalExpiry(bool checkExpiry) {
     CFMutableDictionaryRef options = NULL;
     SecPolicyRef result = NULL;
 
-    /* Create basic Apple pinned policy */
-    require(result = SecPolicyCreateApplePinned(kSecPolicyNameExternalDeveloper,
-                                                CFSTR("1.2.840.113635.100.6.2.1"),  // WWDR Intermediate OID
-                                                CFSTR("1.2.840.113635.100.6.1.2")), // "iPhone Developer" leaf OID
-            errOut);
+    require(options = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+                                                &kCFTypeDictionaryKeyCallBacks,
+                                                &kCFTypeDictionaryValueCallBacks), errOut);
 
-    require_action(options = CFDictionaryCreateMutableCopy(NULL, 0, result->_options), errOut, CFReleaseNull(result));
+    if (checkExpiry) {
+        SecPolicyAddBasicX509Options(options);
+    } else {
+        SecPolicyAddBasicCertOptions(options);
+    }
 
-    /* Additional intermediate OIDs */
+    /* Anchored to the Apple Roots */
+    require(SecPolicyAddAppleAnchorOptions(options, kSecPolicyNameExternalDeveloper), errOut);
+
+    /* Exactly 3 certs in the chain */
+    require(SecPolicyAddChainLengthOptions(options, 3), errOut);
+
+    /* Intermediate marker OIDs */
+    add_element(options, kSecPolicyCheckIntermediateMarkerOid,
+                CFSTR("1.2.840.113635.100.6.2.1")); // WWDR Intermediate OID
     add_element(options, kSecPolicyCheckIntermediateMarkerOid,
                 CFSTR("1.2.840.113635.100.6.2.6")); // "Developer ID" Intermediate OID
 
-    /* Addtional leaf OIDS */
+    /* Leaf marker OIDs */
+    add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.2"));  // "iPhone Developer" leaf OID
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.4"));  // "iPhone Distribution" leaf OID
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.5"));  // "Safari Developer" leaf OID
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.7"));  // "3rd Party Mac Developer Application" leaf OID
@@ -3701,6 +3727,7 @@ SecPolicyRef SecPolicyCreateAppleExternalDeveloper(void) {
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.12")); // "Mac Developer" leaf OID
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.13")); // "Developer ID Application" leaf OID
     add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.14")); // "Developer ID Installer" leaf OID
+    add_leaf_marker_string(options, CFSTR("1.2.840.113635.100.6.1.35")); // "Swift Package Registry" leaf OID
 
     /* Restrict EKUs */
     add_eku_string(options, CFSTR("1.3.6.1.5.5.7.3.3"));       // CodeSigning EKU
@@ -3708,14 +3735,25 @@ SecPolicyRef SecPolicyCreateAppleExternalDeveloper(void) {
     add_eku_string(options, CFSTR("1.2.840.113635.100.4.9"));  // "3rd Party Mac Developer Installer" EKU
     add_eku_string(options, CFSTR("1.2.840.113635.100.4.13")); // "Developer ID Installer" EKU
 
-    CFReleaseSafe(result->_options);
-    result->_options = CFRetainSafe(options);
+    /* Check revocation using any available method */
+    add_element(options, kSecPolicyCheckRevocation, kSecPolicyCheckRevocationAny);
 
-    SecPolicySetOid(result, kSecPolicyAppleExternalDeveloper);
+    /* RSA key sizes are 2048-bit or larger. EC key sizes are P-256 or larger. */
+    require(SecPolicyAddStrongKeySizeOptions(options), errOut);
+
+    /* Check for weak hashes */
+    // require(SecPolicyRemoveWeakHashOptions(options), errOut); // the current WWDR CA cert is signed with SHA1
+    require(result = SecPolicyCreate(kSecPolicyAppleExternalDeveloper,
+                                     kSecPolicyNameExternalDeveloper,
+                                     options), errOut);
 
 errOut:
     CFReleaseSafe(options);
     return result;
+}
+
+SecPolicyRef SecPolicyCreateAppleExternalDeveloper(void) {
+    return SecPolicyCreateAppleExternalDeveloperOptionalExpiry(true);
 }
 
 /* This one is special because the intermediate has no marker OID */
