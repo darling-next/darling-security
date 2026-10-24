@@ -429,14 +429,6 @@ static uint8_t *der_encode_v1_dictionary(CFDictionaryRef dictionary,
         body_end = entry_begin;
     }
 
-    if (body_end != der) {
-        CFRelease(sorted_keys);
-        free(keys);
-        SecCFDERCreateError(kSecDERErrorAllocationFailure,
-                            CFSTR("V1 dictionary size mismatch"), NULL, error);
-        return NULL;
-    }
-
     CFRelease(sorted_keys);
     free(keys);
 
