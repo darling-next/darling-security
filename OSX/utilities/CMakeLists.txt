@@ -20,6 +20,7 @@ add_security_library(utilities
 		der_number.c
 		der_plist.c
 		der_plist_internal.c
+		der_plist_v1.c
 		der_set.c
 		der_string.c
 		fileIo.c

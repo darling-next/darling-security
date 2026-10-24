@@ -77,3 +77,17 @@ target_link_libraries(securitytool_macos
 
 install(TARGETS securitytool_macos DESTINATION libexec/darling/usr/bin)
 install(FILES security.1 DESTINATION libexec/darling/usr/share/man/man1)
+
+add_darling_executable(derq
+	derq.c
+)
+target_link_libraries(derq
+	CoreFoundation
+	utilities
+	security_utilities
+	Security
+	objc
+	system
+)
+install(TARGETS derq DESTINATION libexec/darling/usr/bin COMPONENT derq)
+install(FILES derq.1 DESTINATION libexec/darling/usr/share/man/man1 COMPONENT derq)
