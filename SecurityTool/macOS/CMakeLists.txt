@@ -91,3 +91,22 @@ target_link_libraries(derq
 )
 install(TARGETS derq DESTINATION libexec/darling/usr/bin COMPONENT derq)
 install(FILES derq.1 DESTINATION libexec/darling/usr/share/man/man1 COMPONENT derq)
+
+# Real codesign option adapter over Security.framework's SecCodeSigner.
+# See codesign.c for the vendored/upstream/sibling provenance and the three
+# distinct flag domains. This is not the fake-success src/tools/codesign stub.
+add_darling_executable(codesign
+	codesign.c
+)
+target_include_directories(codesign PRIVATE
+	${SECURITY_PROJECT_DIR}/darling/include/macOS
+)
+target_link_libraries(codesign
+	CoreFoundation
+	utilities
+	security_utilities
+	Security
+	objc
+	system
+)
+install(TARGETS codesign DESTINATION libexec/darling/usr/bin COMPONENT codesign)
