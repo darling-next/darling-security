@@ -245,11 +245,23 @@ int main(int argc, char *argv[])
         if (error != NULL) {
             CFStringRef desc = CFErrorCopyDescription(error);
             if (desc != NULL) {
-                char buf[1024];
+                char buf[2048];
                 if (CFStringGetCString(desc, buf, sizeof(buf),
                                        kCFStringEncodingUTF8))
                     fprintf(stderr, "codesign: sign error: %s\n", buf);
                 CFRelease(desc);
+            }
+            CFDictionaryRef info = CFErrorCopyUserInfo(error);
+            if (info != NULL) {
+                CFStringRef info_desc = CFCopyDescription(info);
+                if (info_desc != NULL) {
+                    char buf[4096];
+                    if (CFStringGetCString(info_desc, buf, sizeof(buf),
+                                           kCFStringEncodingUTF8))
+                        fprintf(stderr, "codesign: sign userInfo: %s\n", buf);
+                    CFRelease(info_desc);
+                }
+                CFRelease(info);
             }
             CFRelease(error);
         }
