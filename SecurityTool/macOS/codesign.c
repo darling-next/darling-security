@@ -215,7 +215,7 @@ int main(int argc, char *argv[])
     SecCodeSignerRef signer = NULL;
     OSStatus status = SecCodeSignerCreate(parameters, operation_flags, &signer);
     CFRelease(parameters);
-    if (status != errSecSuccess)
+    if (status != 0)
         return fail_status("SecCodeSignerCreate", status);
 
     CFURLRef url = CFURLCreateFromFileSystemRepresentation(
@@ -227,7 +227,7 @@ int main(int argc, char *argv[])
     SecStaticCodeRef code = NULL;
     status = SecStaticCodeCreateWithPath(url, kSecCSDefaultFlags, &code);
     CFRelease(url);
-    if (status != errSecSuccess) {
+    if (status != 0) {
         CFRelease(signer);
         return fail_status("SecStaticCodeCreateWithPath", status);
     }
@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
         signer, code, kSecCSDefaultFlags, &error);
     CFRelease(code);
     CFRelease(signer);
-    if (status != errSecSuccess) {
+    if (status != 0) {
         if (error != NULL) {
             CFStringRef desc = CFErrorCopyDescription(error);
             if (desc != NULL) {
