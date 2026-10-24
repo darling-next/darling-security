@@ -38,8 +38,8 @@ run_case() {
         fail "$name (exit $rc): $(tr '\n' ' ' < "$tmp.err")"
     elif ! cmp -s "$tmp" "$here/$expected"; then
         fail "$name (DER mismatch)"
-        echo "  expected: $(od -An -tx1 -v "$here/$expected" | tr -d ' \n')" >&2
-        echo "  actual:   $(od -An -tx1 -v "$tmp" | tr -d ' \n')" >&2
+        echo "  first differing bytes (position, expected-octal, actual-octal):" >&2
+        cmp -l "$here/$expected" "$tmp" 2>/dev/null | head -20 >&2 || true
     else
         pass "$name"
     fi

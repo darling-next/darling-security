@@ -221,6 +221,25 @@ static size_t der_sizeof_v1_dictionary(CFDictionaryRef dictionary,
     return ccder_sizeof(CCDER_CONTEXT_16, ctx.size);
 }
 
+static size_t der_sizeof_v1_boolean(CFBooleanRef value, CFErrorRef *error)
+{
+    (void)value;
+    (void)error;
+    return ccder_sizeof(CCDER_BOOLEAN, 1);
+}
+
+static uint8_t *der_encode_v1_boolean(CFBooleanRef value, CFErrorRef *error,
+                                      const uint8_t *der, uint8_t *der_end)
+{
+    /* Native V1 writes canonical DER TRUE as 0xFF. The legacy SET codec
+     * writes 0x01 and must stay unchanged; this is the V1-specific form. */
+    uint8_t body = CFBooleanGetValue(value) ? 0xff : 0x00;
+    return SecCCDEREncodeHandleResult(
+        ccder_encode_tl(CCDER_BOOLEAN, 1, der,
+                        ccder_encode_body(1, &body, der, der_end)),
+        error);
+}
+
 static size_t der_sizeof_v1_value(CFTypeRef value, CFErrorRef *error)
 {
     if (value == NULL) {
@@ -231,7 +250,7 @@ static size_t der_sizeof_v1_value(CFTypeRef value, CFErrorRef *error)
 
     CFTypeID type = CFGetTypeID(value);
     if (type == CFBooleanGetTypeID()) {
-        return der_sizeof_boolean((CFBooleanRef)value, error);
+        return der_sizeof_v1_boolean((CFBooleanRef)value, error);
     }
     if (type == CFNumberGetTypeID()) {
         return der_sizeof_v1_number((CFNumberRef)value, error);
@@ -449,7 +468,7 @@ static uint8_t *der_encode_v1_value(CFTypeRef value, CFErrorRef *error,
 
     CFTypeID type = CFGetTypeID(value);
     if (type == CFBooleanGetTypeID()) {
-        return der_encode_boolean((CFBooleanRef)value, error, der, der_end);
+        return der_encode_v1_boolean((CFBooleanRef)value, error, der, der_end);
     }
     if (type == CFNumberGetTypeID()) {
         return der_encode_v1_number((CFNumberRef)value, error, der, der_end);
