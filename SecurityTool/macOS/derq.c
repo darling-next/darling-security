@@ -233,10 +233,12 @@ int main(int argc, char **argv)
                              CFDataGetBytePtr(encoded),
                              (size_t)CFDataGetLength(encoded));
     CFRelease(encoded);
-    if (output != stdout) {
-        if (fclose(output) != 0) {
+    if (output == stdout) {
+        if (fflush(output) != 0) {
             written = false;
         }
+    } else if (fclose(output) != 0) {
+        written = false;
     }
     if (!written) {
         fprintf(stderr, "derq: failed to write output\n");

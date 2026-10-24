@@ -54,10 +54,10 @@ static bool v1_check_string(CFStringRef string, bool is_key, CFErrorRef *error)
     }
 
     CFIndex used = 0;
-    bool converted = CFStringGetBytes(string, CFRangeMake(0, length),
-                                      kCFStringEncodingUTF8, 0, false,
-                                      buffer, maximum, &used);
-    if (!converted) {
+    CFIndex converted = CFStringGetBytes(string, CFRangeMake(0, length),
+                                         kCFStringEncodingUTF8, 0, false,
+                                         buffer, maximum, &used);
+    if (converted != length) {
         free(buffer);
         SecCFDERCreateError(kSecDERErrorUnsupportedCFObject,
                             CFSTR("V1 string extraction failed"), NULL, error);
@@ -79,15 +79,28 @@ static bool v1_check_string(CFStringRef string, bool is_key, CFErrorRef *error)
 
 static bool v1_number_to_int64(CFNumberRef number, long long *value)
 {
-    if (CFNumberGetValue(number, kCFNumberLongLongType, value)) {
-        return true;
+    /* Keep integer numbers on their actual CF integer representation. In
+     * particular the XML parser stores values above INT64_MAX as a private
+     * 128-bit CFNumber; CFNumberGetValue(SInt64) preserves the low 64 bits,
+     * which is the native wrap (UINT64_MAX -> -1, 2^63 -> INT64_MIN). */
+    if (!CFNumberIsFloatType(number)) {
+        return CFNumberGetValue(number, kCFNumberSInt64Type, value) != false;
     }
+
+    /* A real is a double CFNumber. Truncate toward zero, matching the native
+     * 1.5 -> 1 result, but reject NaN, infinity and values outside the
+     * representable signed 64-bit range before performing the cast. */
     double double_value = 0;
-    if (CFNumberGetValue(number, kCFNumberDoubleType, &double_value)) {
-        *value = (long long)double_value;
-        return true;
+    if (!CFNumberGetValue(number, kCFNumberDoubleType, &double_value)) {
+        return false;
     }
-    return false;
+    if (double_value != double_value ||
+        double_value < -9223372036854775808.0 ||
+        double_value >= 9223372036854775808.0) {
+        return false;
+    }
+    *value = (long long)double_value;
+    return true;
 }
 
 static size_t der_sizeof_v1_number(CFNumberRef number, CFErrorRef *error)
@@ -345,27 +358,25 @@ static uint8_t *der_encode_v1_dictionary(CFDictionaryRef dictionary,
     }
 
     const void **keys = malloc(sizeof(void *) * (size_t)count);
-    const void **values = malloc(sizeof(void *) * (size_t)count);
-    if (keys == NULL || values == NULL) {
-        free(keys);
-        free(values);
+    if (keys == NULL) {
         SecCFDERCreateError(kSecDERErrorAllocationFailure,
                             CFSTR("V1 key allocation failed"), NULL, error);
         return NULL;
     }
 
-    CFDictionaryGetKeysAndValues(dictionary, keys, values);
+    CFDictionaryGetKeysAndValues(dictionary, keys, NULL);
 
     for (CFIndex i = 0; i < count; ++i) {
-        if (CFGetTypeID(keys[i]) != CFStringGetTypeID() ||
-            !v1_check_string((CFStringRef)keys[i], true, error)) {
+        CFStringRef key = (CFStringRef)keys[i];
+        if (CFGetTypeID(key) != CFStringGetTypeID()) {
+            SecCFDERCreateError(kSecDERErrorUnsupportedCFObject,
+                                CFSTR("V1 entitlement key is not a string"),
+                                NULL, error);
             free(keys);
-            free(values);
-            if (CFGetTypeID(keys[i]) != CFStringGetTypeID()) {
-                SecCFDERCreateError(kSecDERErrorUnsupportedCFObject,
-                                    CFSTR("V1 entitlement key is not a string"),
-                                    NULL, error);
-            }
+            return NULL;
+        }
+        if (!v1_check_string(key, true, error)) {
+            free(keys);
             return NULL;
         }
     }
@@ -373,7 +384,6 @@ static uint8_t *der_encode_v1_dictionary(CFDictionaryRef dictionary,
     CFMutableArrayRef sorted_keys = CFArrayCreateMutable(NULL, count, &kCFTypeArrayCallBacks);
     if (sorted_keys == NULL) {
         free(keys);
-        free(values);
         SecCFDERCreateError(kSecDERErrorAllocationFailure,
                             CFSTR("V1 key array allocation failed"), NULL, error);
         return NULL;
@@ -386,80 +396,49 @@ static uint8_t *der_encode_v1_dictionary(CFDictionaryRef dictionary,
     if (!v1_check_canonical_duplicates(sorted_keys, error)) {
         CFRelease(sorted_keys);
         free(keys);
-        free(values);
         return NULL;
     }
 
     CFArraySortValues(sorted_keys, CFRangeMake(0, count), v1_compare_utf8_keys, NULL);
 
-    CFMutableArrayRef entries = CFArrayCreateMutable(NULL, count, &kCFTypeArrayCallBacks);
-    if (entries == NULL) {
-        CFRelease(sorted_keys);
-        free(keys);
-        free(values);
-        SecCFDERCreateError(kSecDERErrorAllocationFailure,
-                            CFSTR("V1 entry array allocation failed"), NULL, error);
-        return NULL;
-    }
-
-    for (CFIndex i = 0; i < count; ++i) {
-        CFStringRef key = CFArrayGetValueAtIndex(sorted_keys, i);
-        CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-        size_t entry_size = der_sizeof_v1_key_value(key, value, error);
-        if (entry_size == 0) {
-            CFRelease(entries);
-            CFRelease(sorted_keys);
-            free(keys);
-            free(values);
-            return NULL;
-        }
-
-        CFMutableDataRef entry = CFDataCreateMutable(NULL, entry_size);
-        if (entry == NULL) {
-            CFRelease(entries);
-            CFRelease(sorted_keys);
-            free(keys);
-            free(values);
-            SecCFDERCreateError(kSecDERErrorAllocationFailure,
-                                CFSTR("V1 entry allocation failed"), NULL, error);
-            return NULL;
-        }
-        CFDataSetLength(entry, entry_size);
-        uint8_t *entry_begin = CFDataGetMutableBytePtr(entry);
-        uint8_t *entry_end = entry_begin + entry_size;
-        if (der_encode_v1_entry(key, value, error, entry_begin, entry_end) != entry_begin) {
-            CFRelease(entry);
-            CFRelease(entries);
-            CFRelease(sorted_keys);
-            free(keys);
-            free(values);
-            return NULL;
-        }
-        CFArrayAppendValue(entries, entry);
-        CFRelease(entry);
-    }
-
+    /* The destination was sized by der_sizeof_v1_dictionary. Encode the sorted
+     * entries directly into it in reverse order, so no per-entry CFData
+     * allocation or copy is needed. */
     uint8_t *body_end = der_end;
     for (CFIndex i = count; i > 0;) {
         --i;
-        CFDataRef entry = CFArrayGetValueAtIndex(entries, i);
-        body_end = ccder_encode_body(CFDataGetLength(entry),
-                                     CFDataGetBytePtr(entry), der, body_end);
-        if (body_end == NULL) {
-            CFRelease(entries);
+        CFStringRef key = CFArrayGetValueAtIndex(sorted_keys, i);
+        CFTypeRef value = CFDictionaryGetValue(dictionary, key);
+        size_t entry_size = der_sizeof_v1_key_value(key, value, error);
+        if (entry_size == 0 || body_end < der ||
+            (size_t)(body_end - der) < entry_size) {
+            if (entry_size != 0) {
+                SecCFDERCreateError(kSecDERErrorAllocationFailure,
+                                    CFSTR("V1 dictionary size mismatch"), NULL, error);
+            }
             CFRelease(sorted_keys);
             free(keys);
-            free(values);
-            SecCFDERCreateError(kSecDERErrorAllocationFailure,
-                                CFSTR("V1 dictionary encoding failed"), NULL, error);
             return NULL;
         }
+        uint8_t *entry_begin = body_end - entry_size;
+        if (der_encode_v1_entry(key, value, error, entry_begin, body_end) != entry_begin) {
+            CFRelease(sorted_keys);
+            free(keys);
+            return NULL;
+        }
+        body_end = entry_begin;
     }
 
-    CFRelease(entries);
+    if (body_end != der) {
+        CFRelease(sorted_keys);
+        free(keys);
+        SecCFDERCreateError(kSecDERErrorAllocationFailure,
+                            CFSTR("V1 dictionary size mismatch"), NULL, error);
+        return NULL;
+    }
+
     CFRelease(sorted_keys);
     free(keys);
-    free(values);
 
     return SecCCDEREncodeHandleResult(
         ccder_encode_constructed_tl(CCDER_CONTEXT_16,
