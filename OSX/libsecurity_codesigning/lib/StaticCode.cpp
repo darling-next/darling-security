@@ -73,6 +73,10 @@
 #include <regex.h>
 #import <utilities/entitlements.h>
 
+#ifdef DARLING
+extern "C" long __darling_fadvise_noreuse(int fd);
+#endif
+
 
 namespace Security {
 namespace CodeSigning {
@@ -1247,7 +1251,15 @@ void SecStaticCode::validateExecutable()
 			if (!cd)
 				MacOSError::throwMe(errSecCSUnsigned);
 			AutoFileDesc fd(mainExecutablePath(), O_RDONLY);
+#ifdef DARLING
+			// Vendored and current Apple Security use Darwin-only F_NOCACHE.
+			// Port the one-pass hint to Linux replacement policy, not cache bypass.
+			long advice = __darling_fadvise_noreuse(fd);
+			if (advice < 0)
+				UnixError::throwMe(-advice);
+#else
 			fd.fcntl(F_NOCACHE, true);		// turn off page caching (one-pass)
+#endif
 			if (Universal *fat = mRep->mainExecutableImage())
 				fd.seek(fat->archOffset());
 			size_t pageSize = cd->pageSize ? (1 << cd->pageSize) : 0;
