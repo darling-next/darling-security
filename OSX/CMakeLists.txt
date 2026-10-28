@@ -355,15 +355,3 @@ target_include_directories(Security_obj PRIVATE
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-include(darling_bundle)
-
-add_darling_bundle(csparser ""
-	lib/plugins/csparser.cpp
-)
-make_fat(csparser)
-target_link_libraries(csparser security_cdsa_utilities utilities)
-set_target_properties(csparser PROPERTIES
-	OUTPUT_NAME "csparser"
-	PREFIX ""
-	SUFFIX ".bundle"
-)

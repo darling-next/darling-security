@@ -27,55 +27,22 @@
 #include "reqparser.h"
 #include "antlrplugin.h"
 #include "cserror.h"
-#include "codesigning_dtrace.h"
 #include <CoreFoundation/CoreFoundation.h>
-#include <security_utilities/osxcode.h>
-#include <security_utilities/logging.h>
 
 namespace Security {
 namespace CodeSigning {
 
 
-struct PluginHost {
-	PluginHost();
-	RefPointer<LoadableBundle> plugin;
-	AntlrPlugin *antlr;
-};
-
-ModuleNexus<PluginHost> plugin;
-
-
 //
-// The PluginHost constructor runs under the protection of ModuleNexus's constructor,
-// so it doesn't have to worry about thread safety and such.
-//
-PluginHost::PluginHost()
-{
-	if (CFBundleRef securityFramework = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.security")))
-		if (CFRef<CFURLRef> plugins = CFBundleCopyBuiltInPlugInsURL(securityFramework))
-			if (CFRef<CFURLRef> pluginURL = makeCFURL("csparser.bundle", true, plugins)) {
-				plugin = new LoadableBundle(cfString(pluginURL).c_str());
-				plugin->load();
-				CODESIGN_LOAD_ANTLR();
-				antlr = reinterpret_cast<FindAntlrPlugin *>(plugin->lookupSymbol(FINDANTLRPLUGIN))();
-				return;
-			}
-				
-	// can't load plugin - fail
-    Syslog::warning("code signing problem: unable to load csparser plug-in");
-	MacOSError::throwMe(errSecCSInternalError);
-}
-
-
-//
-// Drive a parsing function through the plugin harness and translate any errors
-// into a CFError exception.
+// Drive the statically linked parser and translate syntax errors into a CFError.
+// security_codesigning already includes antlrplugin.cpp, its lexer and grammar;
+// no separately loaded csparser.bundle is needed.
 //
 template <class Result, class Source>
 const Result *parse(Source source, const Result *(*AntlrPlugin::*func)(Source, string &))
 {
 	string errors;
-	if (const Result *result = (plugin().antlr->*func)(source, errors))
+	if (const Result *result = (findAntlrPlugin()->*func)(source, errors))
 		return result;
 	else
 		CSError::throwMe(errSecCSReqInvalid, kSecCFErrorRequirementSyntax, CFTempString(errors));		
@@ -83,7 +50,7 @@ const Result *parse(Source source, const Result *(*AntlrPlugin::*func)(Source, s
 
 
 //
-// Implement the template instances by passing them through the plugin's eye-of-the-needle.
+// Implement the template instances through the parser's supported entry points.
 // Any other combination of input and output types will cause linker errors.
 //
 template <>

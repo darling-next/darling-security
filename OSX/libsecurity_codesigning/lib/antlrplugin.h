@@ -22,7 +22,7 @@
  */
 
 //
-// Plugin interface for internal Security plug-ins
+// Interface to the statically linked requirement parser
 //
 #ifndef _H_ANTLRPLUGIN
 #define _H_ANTLRPLUGIN
@@ -37,12 +37,7 @@ namespace CodeSigning {
 
 
 //
-// The plugin proxy.
-//
-// During loading, one instance of this object will be created by the plugin
-// and returned through the (one and only) dynamically-linked method of the plugin.
-// All further interaction then proceeds through methods of this object.
-//
+// Parsing entry points backed by the vendored lexer and grammar.
 //
 class AntlrPlugin {
 public:
@@ -62,10 +57,8 @@ public:
 
 extern "C" {
 	AntlrPlugin *findAntlrPlugin();
-	typedef AntlrPlugin *FindAntlrPlugin();
 }
 
-#define FINDANTLRPLUGIN "findAntlrPlugin"
 
 
 } // end namespace CodeSigning
