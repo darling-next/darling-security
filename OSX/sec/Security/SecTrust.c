@@ -1918,6 +1918,22 @@ SecCertificateRef SecTrustGetCertificateAtIndex(SecTrustRef trust,
     return cert;
 }
 
+/* Backported from Apple's macOS 12 SecTrustCopyCertificateChain implementation. */
+CFArrayRef SecTrustCopyCertificateChain(SecTrustRef trust) {
+    if (!trust) {
+        return NULL;
+    }
+
+    __block CFArrayRef result = NULL;
+    SecTrustEvaluateIfNecessary(trust);
+    dispatch_sync(trust->_trustQueue, ^{
+        if (trust->_chain && CFArrayGetCount(trust->_chain) > 0) {
+            result = CFArrayCreateCopy(NULL, trust->_chain);
+        }
+    });
+    return result;
+}
+
 CFDictionaryRef SecTrustCopyInfo(SecTrustRef trust) {
     if (!trust) {
         return NULL;
