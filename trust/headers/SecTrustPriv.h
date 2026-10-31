@@ -465,6 +465,15 @@ uint64_t SecTrustGetExceptionResetCount(CFErrorRef _Nullable * _Nullable CF_RETU
 OSStatus SecTrustIncrementExceptionResetCount(CFErrorRef _Nullable * _Nullable CF_RETURNS_RETAINED error)
     API_AVAILABLE(macos(11.3), ios(12.0), tvos(12.0), watchos(5.0));
 
+/*!
+ @function SecTrustGetAppleAnchors
+ @abstract Returns the built-in production Apple anchors.
+ @result A borrowed, process-lifetime array of SecCertificateRefs. Do not
+ release or mutate the array; retain it if an independently owned reference
+ is needed. This API takes no parameters and has no OSStatus result.
+ */
+CFArrayRef SecTrustGetAppleAnchors(void);
+
 #ifdef __BLOCKS__
 /*!
  @function SecTrustEvaluateFastAsync

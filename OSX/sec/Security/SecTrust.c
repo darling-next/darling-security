@@ -59,6 +59,7 @@
 #include <utilities/der_plist.h>
 #include <utilities/SecDispatchRelease.h>
 #include <utilities/SecXPCError.h>
+#include <utilities/SecAppleAnchorPriv.h>
 
 #include "SecRSAKey.h"
 #include <libDER/oids.h>
@@ -3022,4 +3023,9 @@ OSStatus SecTrustIncrementExceptionResetCount(CFErrorRef *error) {
     status = errSecSuccess;
 
     return status;
+}
+
+/* Apple Security's unified trust API returns the borrowed built-in roots. */
+CFArrayRef SecTrustGetAppleAnchors(void) {
+    return SecGetAppleTrustAnchors(false);
 }
